@@ -1,4 +1,6 @@
 library(dplyr)
+library(readr)
+#library(gdata)
 
 #100 = Audio
 #101 = Music
@@ -55,22 +57,41 @@ library(dplyr)
 # set to US locate to parse date string
 Sys.setlocale(category = "LC_TIME", locale = "en_US.UTF-8")
 
-dta <- read.table("torrent_dump_2004.csv", 
-                  skip = 51, sep = ";", quote = "\"",
-                  col.names = c("ADDED", "HASH(B64)", "NAME", "SIZE(BYTES)", "CATEGORY"),
-                  colClasses = rep("character", 5)
-                  ) %>% 
+# get category names
+if(!file.exists("category_names.csv")){
+  source("category_ids.R")
+}
+
+
+# import data
+dta <- read_csv2(
+  gzfile("torrent_dump_full.csv.gz"), 
+  skip = 1,
+  col_names = c("ADDED", "HASH(B64)", "NAME", "SIZE(BYTES)", "CATEGORY")
+) %>% 
+  # convert to POSIX dates, create category groups, human-readable SIZE
   mutate(
-    category = case_when(
-      substring(.$CATEGORY, 1, 1) == "1" ~ "audio",
-      substring(.$CATEGORY, 1, 1) == "2" ~ "video",
-      substring(.$CATEGORY, 1, 1) == "3" ~ "applications",
-      substring(.$CATEGORY, 1, 1) == "4" ~ "games",
-      substring(.$CATEGORY, 1, 1) == "5" ~ "pron",
-      substring(.$CATEGORY, 1, 1) == "6" ~ "other"
-    ), 
-    added = as.POSIXct(ADDED, format = "%Y-%b-%d %T")
+    added = as.POSIXct(ADDED, format = "%Y-%b-%d %T"),
+    group.id = CATEGORY %/% 100,
+    size = gdata::humanReadable(`SIZE(BYTES)`)
+  ) %>% 
+  # join category groups names
+  left_join(
+    tibble(
+      group = c("audio", "video", "applications", "games", "pron", "other"), 
+      group.id = seq.int(1, 6)
+    )
+  ) %>%
+  # join category names
+  left_join(
+    y = read_csv("category_names.csv"), 
+    by = c("CATEGORY" = "category")
+  ) %>% 
+  # reorder
+  select(
+    added, NAME, category, category.name, group, size, everything()
   )
+
 
 
 tally <- dta %>% 
@@ -78,3 +99,13 @@ tally <- dta %>%
   tally()
 
 tally
+
+
+
+
+url <- "https://thepiratebay.org/static/dump/csv/torrent_dump_2004.csv.gz"
+
+options(download.file.method = "wget")
+test <- read_csv2(url(url))
+read.csv2(url(url))
+
